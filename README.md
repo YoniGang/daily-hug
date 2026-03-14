@@ -1,7 +1,7 @@
 # חיבוק יומי (Daily Hug)
 
 A mobile-first emotional support and gratitude web app built as a personal gift. It feels like a "digital hug" — minimal, calm, and requiring zero cognitive effort.
-
+test
 ## Features
 
 ### Home — The Daily Push
