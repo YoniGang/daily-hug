@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback } from "react";
+import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import * as api from "../api";
 import {
   defaultFeedPosts,
   defaultHappyJarItems,
@@ -6,143 +7,111 @@ import {
   defaultGeneralNotes,
 } from "./mockData";
 
-const STORAGE_KEY_FEED = "dailyhug_feed";
-const STORAGE_KEY_JAR = "dailyhug_jar";
-const STORAGE_KEY_GRATITUDE = "dailyhug_gratitude";
-const STORAGE_KEY_NOTES = "dailyhug_notes";
-
-function loadFromStorage(key, fallback) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore corrupt data */ }
-  return fallback;
-}
-
-function saveToStorage(key, data) {
-  try {
-    localStorage.setItem(key, JSON.stringify(data));
-  } catch { /* quota exceeded — silently fail */ }
-}
-
 const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const [feedPosts, setFeedPosts] = useState(
-    () => loadFromStorage(STORAGE_KEY_FEED, defaultFeedPosts)
-  );
-  const [happyJarItems, setHappyJarItems] = useState(
-    () => loadFromStorage(STORAGE_KEY_JAR, defaultHappyJarItems)
-  );
-  const [gratitudeArchive, setGratitudeArchive] = useState(
-    () => loadFromStorage(STORAGE_KEY_GRATITUDE, defaultGratitudeArchive)
-  );
-  const [generalNotes, setGeneralNotes] = useState(
-    () => loadFromStorage(STORAGE_KEY_NOTES, defaultGeneralNotes)
-  );
+  const [feedPosts, setFeedPosts] = useState([]);
+  const [happyJarItems, setHappyJarItems] = useState([]);
+  const [gratitudeArchive, setGratitudeArchive] = useState([]);
+  const [generalNotes, setGeneralNotes] = useState([]);
 
-  const sortedFeed = [...feedPosts].sort((a, b) => b.timestamp - a.timestamp);
-  const latestDailyMessage = sortedFeed.find((p) => p.type === "daily-message") || null;
-  const sortedGratitude = [...gratitudeArchive].sort((a, b) => b.timestamp - a.timestamp);
-  // Notes preserve manual order (no auto-sort) to support reordering
-
-  const addFeedPost = useCallback((post) => {
-    setFeedPosts((prev) => {
-      const next = [{ ...post, id: `p-${Date.now()}`, timestamp: Date.now() }, ...prev];
-      saveToStorage(STORAGE_KEY_FEED, next);
-      return next;
-    });
+  // Fetch all data from the API on mount
+  useEffect(() => {
+    api.getFeed().then(setFeedPosts);
+    api.getHappyJar().then(setHappyJarItems);
+    api.getGratitude().then(setGratitudeArchive);
+    api.getNotes().then(setGeneralNotes);
   }, []);
 
-  const addDailyMessage = useCallback((content, emoji) => {
-    addFeedPost({ type: "daily-message", content, emoji });
+  // Feed is already sorted by the server (timestamp DESC)
+  const latestDailyMessage = feedPosts.find((p) => p.type === "daily-message") || null;
+  // Gratitude is already sorted by the server (timestamp DESC)
+  // Notes are already sorted by the server (sort_order ASC)
+
+  const addFeedPost = useCallback(async (post) => {
+    const created = await api.addFeedPost(post);
+    setFeedPosts((prev) => [created, ...prev]);
+  }, []);
+
+  const addDailyMessage = useCallback(async (content, emoji) => {
+    await addFeedPost({ type: "daily-message", content, emoji });
   }, [addFeedPost]);
 
-  const addHappyJarItem = useCallback((item) => {
-    setHappyJarItems((prev) => {
-      const next = [{ ...item, id: `hj-${Date.now()}` }, ...prev];
-      saveToStorage(STORAGE_KEY_JAR, next);
-      return next;
-    });
+  const addHappyJarItem = useCallback(async (item) => {
+    const created = await api.addHappyJarItem(item);
+    setHappyJarItems((prev) => [created, ...prev]);
   }, []);
 
-  const deleteHappyJarItem = useCallback((id) => {
-    setHappyJarItems((prev) => {
-      const next = prev.filter((i) => i.id !== id);
-      saveToStorage(STORAGE_KEY_JAR, next);
-      return next;
-    });
+  const deleteHappyJarItem = useCallback(async (id) => {
+    await api.deleteHappyJarItem(id);
+    setHappyJarItems((prev) => prev.filter((i) => i.id !== id));
   }, []);
 
-  const addGratitudeEntry = useCallback((items) => {
-    setGratitudeArchive((prev) => {
-      const entry = { id: `g-${Date.now()}`, items, timestamp: Date.now() };
-      const next = [entry, ...prev];
-      saveToStorage(STORAGE_KEY_GRATITUDE, next);
-      return next;
-    });
+  const addGratitudeEntry = useCallback(async (items) => {
+    const created = await api.addGratitudeEntry(items);
+    setGratitudeArchive((prev) => [created, ...prev]);
   }, []);
 
-  const updateGratitudeEntry = useCallback((id, items) => {
-    setGratitudeArchive((prev) => {
-      const next = prev.map((e) => (e.id === id ? { ...e, items } : e));
-      saveToStorage(STORAGE_KEY_GRATITUDE, next);
-      return next;
-    });
+  const updateGratitudeEntry = useCallback(async (id, items) => {
+    await api.updateGratitudeEntry(id, items);
+    setGratitudeArchive((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, items } : e))
+    );
   }, []);
 
-  const addGeneralNote = useCallback((text, color) => {
-    setGeneralNotes((prev) => {
-      const note = { id: `n-${Date.now()}`, text, color, timestamp: Date.now() };
-      const next = [note, ...prev];
-      saveToStorage(STORAGE_KEY_NOTES, next);
-      return next;
-    });
+  const addGeneralNote = useCallback(async (text, color) => {
+    const created = await api.addNote(text, color);
+    setGeneralNotes((prev) => [created, ...prev]);
   }, []);
 
-  const updateGeneralNote = useCallback((id, text, color) => {
-    setGeneralNotes((prev) => {
-      const next = prev.map((n) => (n.id === id ? { ...n, text, color } : n));
-      saveToStorage(STORAGE_KEY_NOTES, next);
-      return next;
-    });
+  const updateGeneralNote = useCallback(async (id, text, color) => {
+    await api.updateNote(id, text, color);
+    setGeneralNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, text, color } : n))
+    );
   }, []);
 
-  const deleteGeneralNote = useCallback((id) => {
-    setGeneralNotes((prev) => {
-      const next = prev.filter((n) => n.id !== id);
-      saveToStorage(STORAGE_KEY_NOTES, next);
-      return next;
-    });
+  const deleteGeneralNote = useCallback(async (id) => {
+    await api.deleteNote(id);
+    setGeneralNotes((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
-  const reorderGeneralNotes = useCallback((orderedIds) => {
+  const reorderGeneralNotes = useCallback(async (orderedIds) => {
+    // Optimistically reorder in state
     setGeneralNotes((prev) => {
       const map = new Map(prev.map((n) => [n.id, n]));
-      const next = orderedIds.map((id) => map.get(id)).filter(Boolean);
-      saveToStorage(STORAGE_KEY_NOTES, next);
-      return next;
+      return orderedIds.map((id) => map.get(id)).filter(Boolean);
     });
+    await api.reorderNotes(orderedIds);
   }, []);
 
-  const resetToDefaults = useCallback(() => {
-    setFeedPosts(defaultFeedPosts);
-    setHappyJarItems(defaultHappyJarItems);
-    setGratitudeArchive(defaultGratitudeArchive);
-    setGeneralNotes(defaultGeneralNotes);
-    saveToStorage(STORAGE_KEY_FEED, defaultFeedPosts);
-    saveToStorage(STORAGE_KEY_JAR, defaultHappyJarItems);
-    saveToStorage(STORAGE_KEY_GRATITUDE, defaultGratitudeArchive);
-    saveToStorage(STORAGE_KEY_NOTES, defaultGeneralNotes);
+  const resetToDefaults = useCallback(async () => {
+    await api.resetAll({
+      feedPosts: defaultFeedPosts,
+      happyJarItems: defaultHappyJarItems,
+      gratitudeArchive: defaultGratitudeArchive,
+      generalNotes: defaultGeneralNotes,
+    });
+    // Re-fetch everything from the server after reset
+    const [feed, jar, grat, notes] = await Promise.all([
+      api.getFeed(),
+      api.getHappyJar(),
+      api.getGratitude(),
+      api.getNotes(),
+    ]);
+    setFeedPosts(feed);
+    setHappyJarItems(jar);
+    setGratitudeArchive(grat);
+    setGeneralNotes(notes);
   }, []);
 
   return (
     <DataContext.Provider
       value={{
-        feedPosts: sortedFeed,
+        feedPosts,
         latestDailyMessage,
         happyJarItems,
-        gratitudeArchive: sortedGratitude,
+        gratitudeArchive,
         generalNotes,
         addFeedPost,
         addDailyMessage,
