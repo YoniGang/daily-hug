@@ -369,7 +369,7 @@ function NotesSection() {
     if (inJarNoteIds.has(note.id)) return;
     addHappyJarItem({
       type: "self-thought",
-      title: note.text,
+      title: "",
       description: "",
       color: note.color || "lavender",
       sourceNoteId: note.id,

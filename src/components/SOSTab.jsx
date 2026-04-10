@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ShieldCheck, ArrowRight, Wind, Sparkle, Mountain, CloudSun } from "lucide-react";
-import { sosResponses } from "../data/mockData";
+import { useData } from "../data/DataContext";
 
 const feelings = [
   { key: "anxious", label: "חרדה", icon: Wind, color: "bg-sage/50 hover:bg-sage/70 border-sage-dark/30" },
@@ -9,11 +9,18 @@ const feelings = [
   { key: "sad", label: "עצב", icon: CloudSun, color: "bg-blush/50 hover:bg-blush/70 border-blush-dark/30" },
 ];
 
-const responseColors = {
-  sage: "bg-sage/30 border-sage-dark/20",
-  lavender: "bg-lavender/30 border-lavender-dark/20",
-  peach: "bg-peach/30 border-peach-dark/20",
-  blush: "bg-blush/30 border-blush-dark/20",
+const subjectTitles = {
+  anxious: "בואי נישם ביחד",
+  insecure: "תני לי להזכיר לך",
+  overwhelmed: "דבר אחד בכל פעם",
+  sad: "אני מחבק אותך",
+};
+
+const subjectColors = {
+  anxious: "bg-sage/30 border-sage-dark/20",
+  insecure: "bg-lavender/30 border-lavender-dark/20",
+  overwhelmed: "bg-peach/30 border-peach-dark/20",
+  sad: "bg-blush/30 border-blush-dark/20",
 };
 
 function BreathingCircle() {
@@ -27,18 +34,28 @@ function BreathingCircle() {
 }
 
 export default function SOSTab() {
+  const { sosSentences } = useData();
   const [selected, setSelected] = useState(null);
+  const [sentence, setSentence] = useState("");
   const [visible, setVisible] = useState(false);
+
+  const pickRandom = useCallback(
+    (subject) => {
+      const pool = sosSentences[subject];
+      if (!pool || pool.length === 0) return "";
+      return pool[Math.floor(Math.random() * pool.length)];
+    },
+    [sosSentences]
+  );
 
   useEffect(() => {
     if (selected) {
+      setSentence(pickRandom(selected));
       setVisible(false);
       const timer = setTimeout(() => setVisible(true), 50);
       return () => clearTimeout(timer);
     }
-  }, [selected]);
-
-  const response = selected ? sosResponses[selected] : null;
+  }, [selected, pickRandom]);
 
   return (
     <div className="flex flex-col items-center min-h-full px-8 pb-24 pt-12">
@@ -74,14 +91,14 @@ export default function SOSTab() {
             visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3"
           }`}
         >
-          <div className={`w-full rounded-3xl p-7 border ${responseColors[response.color]} shadow-[0_2px_24px_rgba(0,0,0,0.03)]`}>
+          <div className={`w-full rounded-3xl p-7 border ${subjectColors[selected]} shadow-[0_2px_24px_rgba(0,0,0,0.03)]`}>
             <h3 className="text-lg font-bold text-text-primary mb-3">
-              {response.title}
+              {subjectTitles[selected]}
             </h3>
             <p className="text-sm leading-relaxed text-text-primary/80 mb-4">
-              {response.message}
+              {sentence}
             </p>
-            {response.action === "breathing" && <BreathingCircle />}
+            {selected === "anxious" && <BreathingCircle />}
           </div>
 
           <button

@@ -14,6 +14,7 @@ export function DataProvider({ children }) {
   const [happyJarItems, setHappyJarItems] = useState([]);
   const [gratitudeArchive, setGratitudeArchive] = useState([]);
   const [generalNotes, setGeneralNotes] = useState([]);
+  const [sosSentences, setSosSentences] = useState({});
 
   // Fetch all data from the API on mount
   useEffect(() => {
@@ -21,6 +22,14 @@ export function DataProvider({ children }) {
     api.getHappyJar().then(setHappyJarItems);
     api.getGratitude().then(setGratitudeArchive);
     api.getNotes().then(setGeneralNotes);
+    api.getSosSentences().then((rows) => {
+      const grouped = {};
+      for (const r of rows) {
+        if (!grouped[r.subject]) grouped[r.subject] = [];
+        grouped[r.subject].push(r.sentence);
+      }
+      setSosSentences(grouped);
+    });
   }, []);
 
   // Feed is already sorted by the server (timestamp DESC)
@@ -113,6 +122,7 @@ export function DataProvider({ children }) {
         happyJarItems,
         gratitudeArchive,
         generalNotes,
+        sosSentences,
         addFeedPost,
         addDailyMessage,
         addHappyJarItem,

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Sun, Heart, LogOut, Settings } from "lucide-react";
+import { Sun, Heart, LogOut, Settings, ImageOff } from "lucide-react";
 import { useData } from "../data/DataContext";
 import { useAuth } from "../data/AuthContext";
 
@@ -8,6 +8,25 @@ function getGreeting() {
   if (hour < 12) return "בוקר טוב";
   if (hour < 17) return "צהריים טובים";
   return "ערב טוב";
+}
+
+function MessageImage({ b64 }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="mt-5 flex items-center justify-center h-24 rounded-2xl bg-warm-gray/30 text-text-muted/50">
+        <ImageOff size={20} />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={`data:image/jpeg;base64,${b64}`}
+      alt=""
+      onError={() => setFailed(true)}
+      className="mt-5 w-full max-h-56 object-cover rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
+    />
+  );
 }
 
 export default function HomeTab({ onOpenAdmin }) {
@@ -65,6 +84,10 @@ export default function HomeTab({ onOpenAdmin }) {
           <p className="text-center text-lg leading-relaxed font-medium text-text-primary">
             {message.content}
           </p>
+
+          {message.image_b64 && (
+            <MessageImage b64={message.image_b64} />
+          )}
 
           <div className="mt-8 flex items-center justify-center gap-1.5 text-text-muted">
             <Heart size={14} fill="currentColor" />

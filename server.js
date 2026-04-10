@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import multer from "multer";
 import Database from "better-sqlite3";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -11,6 +12,16 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 app.use(cors());
 app.use(express.json());
+
+// Multer: accept a single image in memory, 2 MB max (images arrive pre-compressed)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("רק קבצי תמונה מותרים"));
+  },
+});
 
 // --- Database setup ---
 const db = new Database("database.sqlite");
@@ -56,6 +67,12 @@ db.exec(`
     timestamp INTEGER NOT NULL,
     sort_order INTEGER NOT NULL DEFAULT 0
   );
+
+  CREATE TABLE IF NOT EXISTS sos_sentences (
+    id TEXT PRIMARY KEY,
+    subject TEXT NOT NULL,
+    sentence TEXT NOT NULL
+  );
 `);
 
 // --- Migration: add owner_email column to content tables ---
@@ -71,9 +88,48 @@ addColumnIfMissing("happy_jar", "owner_email", "TEXT", "''");
 addColumnIfMissing("gratitude_archive", "owner_email", "TEXT", "''");
 addColumnIfMissing("general_notes", "owner_email", "TEXT", "''");
 addColumnIfMissing("users", "is_admin", "INTEGER", "0");
+addColumnIfMissing("feed_posts", "image_blob", "BLOB", "NULL");
+addColumnIfMissing("happy_jar", "image_blob", "BLOB", "NULL");
+addColumnIfMissing("happy_jar", "source_feed_id", "TEXT", "NULL");
 
 // Ensure yonigang1@gmail.com is always admin
 db.prepare("UPDATE users SET is_admin = 1 WHERE email = ?").run("yonigang1@gmail.com");
+
+// --- Seed sos_sentences if empty ---
+{
+  const count = db.prepare("SELECT COUNT(*) AS cnt FROM sos_sentences").get().cnt;
+  if (count === 0) {
+    const insert = db.prepare("INSERT INTO sos_sentences (id, subject, sentence) VALUES (?, ?, ?)");
+    const tx = db.transaction(() => {
+      // חרדה (anxious)
+      insert.run("sos-1",  "anxious", "כל מה שאת רוצה נמצא בצד השני של הפחד");
+      insert.run("sos-2",  "anxious", "בלילה הכי חשוך יש כוכבים שמאירים");
+      insert.run("sos-3",  "anxious", "זכרי, זה רק זמני. ימים טובים יותר מחכים");
+      insert.run("sos-4",  "anxious", "אל תשפטי כל יום לפי הקציר שקצרת, אלא לפי הזרעים שזרעת");
+      insert.run("sos-5",  "anxious", "את בטוחה. ההרגשה הזו זמנית. בואי נאט ביחד");
+      // חוסר ביטחון (insecure)
+      insert.run("sos-6",  "insecure", "תאמיני שאת יכולה ואת כבר במחצית הדרך");
+      insert.run("sos-7",  "insecure", "את אמיצה יותר ממה שאת מאמינה, חזקה יותר ממה שנראה");
+      insert.run("sos-8",  "insecure", "תחשבי כמו מלכה. מלכה לא מפחדת להיכשל");
+      insert.run("sos-9",  "insecure", "הסתכלי במראה, זו התחרות שלך");
+      insert.run("sos-10", "insecure", "יש בך את הפוטנציאל להגשים חלומות");
+      // עומס (overwhelmed)
+      insert.run("sos-11", "overwhelmed", "שום דבר הוא קשה במיוחד אם את מחלקת אותו לחתיכות קטנות");
+      insert.run("sos-12", "overwhelmed", "זה לא משנה כמה לאט את הולכת, העיקר שלא תעצרי");
+      insert.run("sos-13", "overwhelmed", "מסע של אלף קילומטר מתחיל בצעד אחד");
+      insert.run("sos-14", "overwhelmed", "כל יום הוא הזדמנות חדשה להתחיל מהתחלה");
+      insert.run("sos-15", "overwhelmed", "תתחילי מאיפה שאת עומדת ותעבדי עם הכלים שעובדים כרגע");
+      // עצב (sad)
+      insert.run("sos-16", "sad", "זכרי שזה רק יום רע, לא חיים רעים");
+      insert.run("sos-17", "sad", "אחרי כל גשם מגיעה קשת");
+      insert.run("sos-18", "sad", "השמש תזרח שוב, אל תאבדי תקווה");
+      insert.run("sos-19", "sad", "אל תבכי כי זה נגמר. תחייכי כי זה קרה");
+      insert.run("sos-20", "sad", "המשיכי ללכת, כל מה שתצטרכי יגיע אלייך בזמן הנכון");
+      insert.run("sos-21", "sad", "יש תמיד אור בקצה המנהרה");
+    });
+    tx();
+  }
+}
 
 // --- Helpers ---
 function generateToken(userId) {
@@ -204,7 +260,12 @@ app.get("/api/feed", (req, res) => {
   const rows = db
     .prepare("SELECT * FROM feed_posts WHERE owner_email = ? ORDER BY timestamp DESC")
     .all(req.user.email);
-  res.json(rows);
+  res.json(
+    rows.map(({ image_blob, ...rest }) => ({
+      ...rest,
+      image_b64: image_blob ? Buffer.from(image_blob).toString("base64") : undefined,
+    }))
+  );
 });
 
 app.post("/api/feed", (req, res) => {
@@ -220,26 +281,101 @@ app.post("/api/feed", (req, res) => {
 // =====================  HAPPY JAR  =====================
 
 app.get("/api/happy-jar", (req, res) => {
-  const rows = db.prepare("SELECT * FROM happy_jar WHERE owner_email = ?").all(req.user.email);
+  const rows = db.prepare(`
+    SELECT hj.*,
+      fp.content  AS feed_content,
+      fp.emoji    AS feed_emoji,
+      fp.image_blob AS feed_image_blob,
+      fp.type     AS feed_type,
+      gn.text     AS note_text,
+      gn.color    AS note_color
+    FROM happy_jar hj
+    LEFT JOIN feed_posts   fp ON hj.source_feed_id = fp.id
+    LEFT JOIN general_notes gn ON hj.source_note_id = gn.id
+    WHERE hj.owner_email = ?
+  `).all(req.user.email);
+
   res.json(
-    rows.map((r) => ({
-      id: r.id,
-      type: r.type,
-      title: r.title,
-      description: r.description,
-      color: r.color,
-      sourceNoteId: r.source_note_id || undefined,
-    }))
+    rows.map((r) => {
+      // Resolve from feed_posts if referenced
+      const title = r.source_feed_id
+        ? (r.feed_emoji ? `${r.feed_emoji} ${r.title || ""}`.trim() : r.title)
+        : r.source_note_id
+        ? (r.note_text || r.title)
+        : r.title;
+
+      const description = r.source_feed_id
+        ? (r.feed_content || r.description)
+        : r.description;
+
+      const color = r.source_note_id && r.note_color
+        ? r.note_color
+        : r.color;
+
+      // Image: prefer feed image if referenced, else jar's own image
+      const imageBlob = r.source_feed_id ? r.feed_image_blob : r.image_blob;
+
+      return {
+        id: r.id,
+        type: r.type,
+        title,
+        description,
+        color,
+        sourceNoteId: r.source_note_id || undefined,
+        sourceFeedId: r.source_feed_id || undefined,
+        image_b64: imageBlob ? Buffer.from(imageBlob).toString("base64") : undefined,
+      };
+    })
   );
 });
 
 app.post("/api/happy-jar", (req, res) => {
-  const { type, title, description, color, sourceNoteId } = req.body;
+  const { type, title, description, color, sourceNoteId, sourceFeedId } = req.body;
   const id = `hj-${Date.now()}`;
   db.prepare(
-    "INSERT INTO happy_jar (id, type, title, description, color, source_note_id, owner_email) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(id, type, title, description, color, sourceNoteId || null, req.user.email);
-  res.json({ id, type, title, description, color, sourceNoteId });
+    "INSERT INTO happy_jar (id, type, title, description, color, source_note_id, source_feed_id, owner_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, type, title || null, description || null, color, sourceNoteId || null, sourceFeedId || null, req.user.email);
+
+  // Re-read with JOINs to return resolved data
+  const r = db.prepare(`
+    SELECT hj.*,
+      fp.content  AS feed_content,
+      fp.emoji    AS feed_emoji,
+      fp.image_blob AS feed_image_blob,
+      gn.text     AS note_text,
+      gn.color    AS note_color
+    FROM happy_jar hj
+    LEFT JOIN feed_posts   fp ON hj.source_feed_id = fp.id
+    LEFT JOIN general_notes gn ON hj.source_note_id = gn.id
+    WHERE hj.id = ?
+  `).get(id);
+
+  const resolvedTitle = r.source_feed_id
+    ? (r.feed_emoji ? `${r.feed_emoji} ${r.title || ""}`.trim() : r.title)
+    : r.source_note_id
+    ? (r.note_text || r.title)
+    : r.title;
+
+  const resolvedDesc = r.source_feed_id
+    ? (r.feed_content || r.description)
+    : r.description;
+
+  const resolvedColor = r.source_note_id && r.note_color
+    ? r.note_color
+    : r.color;
+
+  const imageBlob = r.source_feed_id ? r.feed_image_blob : r.image_blob;
+
+  res.json({
+    id: r.id,
+    type: r.type,
+    title: resolvedTitle,
+    description: resolvedDesc,
+    color: resolvedColor,
+    sourceNoteId: r.source_note_id || undefined,
+    sourceFeedId: r.source_feed_id || undefined,
+    image_b64: imageBlob ? Buffer.from(imageBlob).toString("base64") : undefined,
+  });
 });
 
 app.delete("/api/happy-jar/:id", (req, res) => {
@@ -333,6 +469,13 @@ app.put("/api/notes/reorder", (req, res) => {
   res.json({ ok: true });
 });
 
+// =====================  SOS SENTENCES  =====================
+
+app.get("/api/sos-sentences", (req, res) => {
+  const rows = db.prepare("SELECT * FROM sos_sentences ORDER BY subject, id").all();
+  res.json(rows);
+});
+
 // =====================  RESET  =====================
 
 app.post("/api/reset", (req, res) => {
@@ -353,10 +496,10 @@ app.post("/api/reset", (req, res) => {
     }
 
     const insertJar = db.prepare(
-      "INSERT INTO happy_jar (id, type, title, description, color, source_note_id, owner_email) VALUES (?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO happy_jar (id, type, title, description, color, source_note_id, source_feed_id, owner_email) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
     );
     for (const j of happyJarItems) {
-      insertJar.run(j.id, j.type, j.title, j.description, j.color, j.sourceNoteId || null, email);
+      insertJar.run(j.id, j.type, j.title, j.description, j.color, j.sourceNoteId || null, j.sourceFeedId || null, email);
     }
 
     const insertGrat = db.prepare(
@@ -380,7 +523,7 @@ app.post("/api/reset", (req, res) => {
 
 // =====================  PARTNER (SEND LOVE)  =====================
 
-app.post("/api/partner/daily", (req, res) => {
+app.post("/api/partner/daily", upload.single("image"), (req, res) => {
   if (!req.user.partner_email) {
     return res.status(400).json({ error: "לא מחובר/ת לבן/בת זוג" });
   }
@@ -388,26 +531,32 @@ app.post("/api/partner/daily", (req, res) => {
   if (!content) return res.status(400).json({ error: "תוכן נדרש" });
   const id = `p-${Date.now()}`;
   const timestamp = Date.now();
+  const imageBlob = req.file ? req.file.buffer : null;
   db.prepare(
-    "INSERT INTO feed_posts (id, type, content, emoji, timestamp, owner_email) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(id, "daily-message", content, emoji || null, timestamp, req.user.partner_email);
-  res.json({ id, type: "daily-message", content, emoji: emoji || null, timestamp });
+    "INSERT INTO feed_posts (id, type, content, emoji, timestamp, owner_email, image_blob) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, "daily-message", content, emoji || null, timestamp, req.user.partner_email, imageBlob);
+  const result = { id, type: "daily-message", content, emoji: emoji || null, timestamp };
+  if (imageBlob) result.image_b64 = imageBlob.toString("base64");
+  res.json(result);
 });
 
-app.post("/api/partner/jar", (req, res) => {
+app.post("/api/partner/jar", upload.single("image"), (req, res) => {
   if (!req.user.partner_email) {
     return res.status(400).json({ error: "לא מחובר/ת לבן/בת זוג" });
   }
   const { type, title, description, color } = req.body;
   if (!title || !description) return res.status(400).json({ error: "כותרת ותיאור נדרשים" });
   const id = `hj-${Date.now()}`;
+  const imageBlob = req.file ? req.file.buffer : null;
   db.prepare(
-    "INSERT INTO happy_jar (id, type, title, description, color, source_note_id, owner_email) VALUES (?, ?, ?, ?, ?, NULL, ?)"
-  ).run(id, type || "memory", title, description, color || "peach", req.user.partner_email);
-  res.json({ id, type: type || "memory", title, description, color: color || "peach" });
+    "INSERT INTO happy_jar (id, type, title, description, color, source_note_id, owner_email, image_blob) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)"
+  ).run(id, type || "memory", title, description, color || "peach", req.user.partner_email, imageBlob);
+  const result = { id, type: type || "memory", title, description, color: color || "peach" };
+  if (imageBlob) result.image_b64 = imageBlob.toString("base64");
+  res.json(result);
 });
 
-app.post("/api/partner/feed", (req, res) => {
+app.post("/api/partner/feed", upload.single("image"), (req, res) => {
   if (!req.user.partner_email) {
     return res.status(400).json({ error: "לא מחובר/ת לבן/בת זוג" });
   }
@@ -415,10 +564,13 @@ app.post("/api/partner/feed", (req, res) => {
   if (!content) return res.status(400).json({ error: "תוכן נדרש" });
   const id = `p-${Date.now()}`;
   const timestamp = Date.now();
+  const imageBlob = req.file ? req.file.buffer : null;
   db.prepare(
-    "INSERT INTO feed_posts (id, type, content, emoji, timestamp, owner_email) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(id, type || "love", content, emoji || null, timestamp, req.user.partner_email);
-  res.json({ id, type: type || "love", content, emoji: emoji || null, timestamp });
+    "INSERT INTO feed_posts (id, type, content, emoji, timestamp, owner_email, image_blob) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, type || "love", content, emoji || null, timestamp, req.user.partner_email, imageBlob);
+  const result = { id, type: type || "love", content, emoji: emoji || null, timestamp };
+  if (imageBlob) result.image_b64 = imageBlob.toString("base64");
+  res.json(result);
 });
 
 // =====================  ADMIN  =====================

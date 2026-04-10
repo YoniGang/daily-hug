@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Heart, X, Send, Plus, Sparkles, MessageCircleHeart, BookHeart } from "lucide-react";
+import { useState, useRef } from "react";
+import { Heart, X, Send, Plus, Sparkles, MessageCircleHeart, BookHeart, ImagePlus } from "lucide-react";
 import * as api from "../api";
+import { compressImage } from "../utils/imageCompression";
 
 const EMOJI_OPTIONS = ["🌅", "💛", "🌸", "🫶", "🌿", "✨", "🪐", "💕", "🌟", "🤗", "🙏", "🌻", "💜", "🏡", "😂", "🎵", "👩‍🍳", "❤️"];
 const COLOR_OPTIONS = ["peach", "lavender", "sage", "blush"];
@@ -76,6 +77,30 @@ export default function SendLoveModal() {
   const [hjType, setHjType] = useState("memory");
   const [hjColor, setHjColor] = useState("peach");
 
+  // Image state (shared pattern for daily + feed + jar)
+  const [dmImage, setDmImage] = useState(null);
+  const [dmPreview, setDmPreview] = useState(null);
+  const [fpImage, setFpImage] = useState(null);
+  const [fpPreview, setFpPreview] = useState(null);
+  const [hjImage, setHjImage] = useState(null);
+  const [hjPreview, setHjPreview] = useState(null);
+  const dmFileRef = useRef(null);
+  const fpFileRef = useRef(null);
+  const hjFileRef = useRef(null);
+
+  function handleImageSelect(file, setImage, setPreview) {
+    if (!file) return;
+    setImage(file);
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+  }
+
+  function clearImage(setImage, setPreview, fileRef) {
+    setImage(null);
+    setPreview(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   function showToast(msg) {
     setToast(msg);
     setTimeout(() => setToast(null), 2500);
@@ -85,9 +110,12 @@ export default function SendLoveModal() {
     e.preventDefault();
     if (!dmContent.trim()) return;
     try {
-      await api.sendPartnerDaily(dmContent.trim(), dmEmoji);
+      let compressed = null;
+      if (dmImage) compressed = await compressImage(dmImage);
+      await api.sendPartnerDaily(dmContent.trim(), dmEmoji, compressed);
       setDmContent("");
       setDmEmoji("🌅");
+      clearImage(setDmImage, setDmPreview, dmFileRef);
       showToast("נשלח באהבה 💕");
     } catch (err) {
       showToast(err.message);
@@ -98,9 +126,12 @@ export default function SendLoveModal() {
     e.preventDefault();
     if (!fpContent.trim()) return;
     try {
-      await api.sendPartnerFeed({ type: fpType, content: fpContent.trim(), emoji: fpEmoji });
+      let compressed = null;
+      if (fpImage) compressed = await compressImage(fpImage);
+      await api.sendPartnerFeed({ type: fpType, content: fpContent.trim(), emoji: fpEmoji }, compressed);
       setFpContent("");
       setFpEmoji("🤗");
+      clearImage(setFpImage, setFpPreview, fpFileRef);
       showToast("נשלח באהבה 💕");
     } catch (err) {
       showToast(err.message);
@@ -111,9 +142,12 @@ export default function SendLoveModal() {
     e.preventDefault();
     if (!hjTitle.trim() || !hjDesc.trim()) return;
     try {
-      await api.sendPartnerJar({ type: hjType, title: hjTitle.trim(), description: hjDesc.trim(), color: hjColor });
+      let compressed = null;
+      if (hjImage) compressed = await compressImage(hjImage);
+      await api.sendPartnerJar({ type: hjType, title: hjTitle.trim(), description: hjDesc.trim(), color: hjColor }, compressed);
       setHjTitle("");
       setHjDesc("");
+      clearImage(setHjImage, setHjPreview, hjFileRef);
       showToast("נשלח באהבה 💕");
     } catch (err) {
       showToast(err.message);
@@ -188,6 +222,35 @@ export default function SendLoveModal() {
                     className={inputClass + " resize-none"}
                   />
                 </FormField>
+                <FormField label="תמונה / זיכרון (אופציונלי)">
+                  <input
+                    ref={dmFileRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageSelect(e.target.files[0], setDmImage, setDmPreview)}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => dmFileRef.current?.click()}
+                    className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl border border-dashed border-warm-gray/80 text-xs text-text-muted hover:bg-warm-gray/30 transition"
+                  >
+                    <ImagePlus size={16} />
+                    בחרי תמונה
+                  </button>
+                  {dmPreview && (
+                    <div className="relative mt-2 inline-block">
+                      <img src={dmPreview} alt="תצוגה מקדימה" className="w-28 h-28 object-cover rounded-2xl shadow-sm border border-warm-gray/40" />
+                      <button
+                        type="button"
+                        onClick={() => clearImage(setDmImage, setDmPreview, dmFileRef)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-text-primary/70 text-white flex items-center justify-center text-xs"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
+                </FormField>
                 <button type="submit" disabled={!dmContent.trim()} className={`${btnClass} bg-peach text-text-primary hover:bg-peach-dark/50 disabled:opacity-40`}>
                   <Send size={16} />
                   שלח הודעה
@@ -228,6 +291,35 @@ export default function SendLoveModal() {
                     rows={3}
                     className={inputClass + " resize-none"}
                   />
+                </FormField>
+                <FormField label="תמונה / זיכרון (אופציונלי)">
+                  <input
+                    ref={fpFileRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageSelect(e.target.files[0], setFpImage, setFpPreview)}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fpFileRef.current?.click()}
+                    className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl border border-dashed border-warm-gray/80 text-xs text-text-muted hover:bg-warm-gray/30 transition"
+                  >
+                    <ImagePlus size={16} />
+                    בחרי תמונה
+                  </button>
+                  {fpPreview && (
+                    <div className="relative mt-2 inline-block">
+                      <img src={fpPreview} alt="תצוגה מקדימה" className="w-28 h-28 object-cover rounded-2xl shadow-sm border border-warm-gray/40" />
+                      <button
+                        type="button"
+                        onClick={() => clearImage(setFpImage, setFpPreview, fpFileRef)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-text-primary/70 text-white flex items-center justify-center text-xs"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
                 </FormField>
                 <button type="submit" disabled={!fpContent.trim()} className={`${btnClass} bg-sage text-text-primary hover:bg-sage-dark/50 disabled:opacity-40`}>
                   <Plus size={16} />
@@ -289,6 +381,35 @@ export default function SendLoveModal() {
                     rows={3}
                     className={inputClass + " resize-none"}
                   />
+                </FormField>
+                <FormField label="תמונה / זיכרון (אופציונלי)">
+                  <input
+                    ref={hjFileRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => handleImageSelect(e.target.files[0], setHjImage, setHjPreview)}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => hjFileRef.current?.click()}
+                    className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl border border-dashed border-warm-gray/80 text-xs text-text-muted hover:bg-warm-gray/30 transition"
+                  >
+                    <ImagePlus size={16} />
+                    בחרי תמונה
+                  </button>
+                  {hjPreview && (
+                    <div className="relative mt-2 inline-block">
+                      <img src={hjPreview} alt="תצוגה מקדימה" className="w-28 h-28 object-cover rounded-2xl shadow-sm border border-warm-gray/40" />
+                      <button
+                        type="button"
+                        onClick={() => clearImage(setHjImage, setHjPreview, hjFileRef)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-text-primary/70 text-white flex items-center justify-center text-xs"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
                 </FormField>
                 <button type="submit" disabled={!hjTitle.trim() || !hjDesc.trim()} className={`${btnClass} bg-lavender text-text-primary hover:bg-lavender-dark/50 disabled:opacity-40`}>
                   <Plus size={16} />

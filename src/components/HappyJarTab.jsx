@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Sparkles, RotateCcw, Heart, Trash2 } from "lucide-react";
+import { Sparkles, RotateCcw, Heart, Trash2, ImageOff } from "lucide-react";
 import { useData } from "../data/DataContext";
 
 const colorMap = {
@@ -15,6 +15,25 @@ const typeLabels = {
   photo: "רגע בזמן",
   "self-thought": "מחשבה שלך",
 };
+
+function JarImage({ b64 }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="mt-4 flex items-center justify-center h-24 rounded-2xl bg-warm-gray/30 text-text-muted/50">
+        <ImageOff size={20} />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={`data:image/jpeg;base64,${b64}`}
+      alt=""
+      onError={() => setFailed(true)}
+      className="mt-4 w-full max-h-56 object-cover rounded-2xl shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
+    />
+  );
+}
 
 export default function HappyJarTab() {
   const { happyJarItems, deleteHappyJarItem } = useData();
@@ -83,6 +102,9 @@ export default function HappyJarTab() {
                 {currentItem.description}
               </p>
             )}
+            {currentItem.image_b64 && (
+              <JarImage b64={currentItem.image_b64} />
+            )}
             <div className="mt-5 flex items-center gap-1 text-text-muted">
               <Heart size={12} fill="currentColor" />
               <span className="text-[10px] font-medium">מצנצנת השמחה שלך</span>
@@ -98,15 +120,13 @@ export default function HappyJarTab() {
               <span>תראי לי עוד</span>
             </button>
 
-            {currentItem?.type === "self-thought" && (
-              <button
-                onClick={() => setConfirmRemove(true)}
-                className="flex items-center gap-1.5 text-[11px] text-text-muted/60 hover:text-text-muted transition-colors"
-              >
-                <Trash2 size={12} />
-                הסר מהצנצנת
-              </button>
-            )}
+            <button
+              onClick={() => setConfirmRemove(true)}
+              className="flex items-center gap-1.5 text-[11px] text-text-muted/60 hover:text-text-muted transition-colors"
+            >
+              <Trash2 size={12} />
+              הסר מהצנצנת
+            </button>
           </div>
         </div>
       )}
@@ -119,7 +139,7 @@ export default function HappyJarTab() {
             onClick={(e) => e.stopPropagation()}
           >
             <p className="text-sm font-bold text-text-primary mb-1">להסיר מהצנצנת?</p>
-            <p className="text-xs text-text-muted mb-5">המחשבה תישאר במגירת המחשבות שלך</p>
+            <p className="text-xs text-text-muted mb-5">הפריט יוסר מהצנצנת בלבד</p>
             <div className="flex gap-2">
               <button
                 onClick={handleRemove}

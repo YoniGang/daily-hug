@@ -238,30 +238,3 @@ export const defaultGeneralNotes = [
     timestamp: now - DAY * 6,
   },
 ];
-
-export const sosResponses = {
-  anxious: {
-    title: "בואי נישם ביחד",
-    message: "את בטוחה. ההרגשה הזו זמנית. בואי נאט ביחד — שאפי 4, החזיקי 4, נשפי 4. אני ממש פה.",
-    action: "breathing",
-    color: "sage",
-  },
-  insecure: {
-    title: "תני לי להזכיר לך",
-    message: "את לא יותר מדי. את לא פחות מדי. את בדיוק האדם שבחרתי, והייתי בוחר בך שוב, כל פעם מחדש.",
-    action: "affirmation",
-    color: "lavender",
-  },
-  overwhelmed: {
-    title: "דבר אחד בכל פעם",
-    message: "את לא חייבת לעשות הכל עכשיו. עצמי את העיניים. רק ל-10 שניות. כשתפתחי, תבחרי דבר אחד קטן. אני כל כך גאה בך.",
-    action: "grounding",
-    color: "peach",
-  },
-  sad: {
-    title: "אני מחבק אותך",
-    message: "זה בסדר להרגיש עצובה. את לא צריכה להסביר או לתקן את זה עכשיו. רק תדעי שאני עוטף אותך בחיבוק הכי גדול שיש.",
-    action: "comfort",
-    color: "blush",
-  },
-};
