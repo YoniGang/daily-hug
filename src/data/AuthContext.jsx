@@ -5,15 +5,15 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Only "loading" while there is a token to validate; otherwise we already
+  // know the user is unauthenticated and can render immediately.
+  const [loading, setLoading] = useState(
+    () => !!localStorage.getItem("dailyhug_token")
+  );
 
   // Validate stored token on mount
   useEffect(() => {
-    const token = localStorage.getItem("dailyhug_token");
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    if (!localStorage.getItem("dailyhug_token")) return;
     api
       .getMe()
       .then((u) => setUser(u))
@@ -55,6 +55,7 @@ export function AuthProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");

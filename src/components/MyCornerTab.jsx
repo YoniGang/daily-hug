@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { Flower2, Lightbulb, Save, Plus, X, Pencil, Check, GripVertical, Sparkles } from "lucide-react";
 import { useData } from "../data/DataContext";
 import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
@@ -337,8 +337,12 @@ function NotesSection() {
   const [justSentIds, setJustSentIds] = useState(new Set());
   const [toast, setToast] = useState(null);
 
-  const inJarNoteIds = new Set(
-    happyJarItems.filter((i) => i.sourceNoteId).map((i) => i.sourceNoteId)
+  const inJarNoteIds = useMemo(
+    () =>
+      new Set(
+        happyJarItems.filter((i) => i.sourceNoteId).map((i) => i.sourceNoteId)
+      ),
+    [happyJarItems]
   );
 
   const sensors = useSensors(

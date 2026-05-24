@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { ShieldCheck, ArrowRight, Wind, Sparkle, Mountain, CloudSun } from "lucide-react";
 import { useData } from "../data/DataContext";
 
@@ -23,6 +23,12 @@ const subjectColors = {
   sad: "bg-blush/30 border-blush-dark/20",
 };
 
+function pickRandom(sentences, subject) {
+  const pool = sentences[subject];
+  if (!pool || pool.length === 0) return "";
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 function BreathingCircle() {
   return (
     <div className="flex flex-col items-center gap-4 my-4">
@@ -39,23 +45,13 @@ export default function SOSTab() {
   const [sentence, setSentence] = useState("");
   const [visible, setVisible] = useState(false);
 
-  const pickRandom = useCallback(
-    (subject) => {
-      const pool = sosSentences[subject];
-      if (!pool || pool.length === 0) return "";
-      return pool[Math.floor(Math.random() * pool.length)];
-    },
-    [sosSentences]
-  );
-
-  useEffect(() => {
-    if (selected) {
-      setSentence(pickRandom(selected));
-      setVisible(false);
-      const timer = setTimeout(() => setVisible(true), 50);
-      return () => clearTimeout(timer);
-    }
-  }, [selected, pickRandom]);
+  function handleSelect(key) {
+    setSelected(key);
+    setSentence(pickRandom(sosSentences, key));
+    setVisible(false);
+    // Brief delay so the CSS transition runs from opacity 0 → 1
+    setTimeout(() => setVisible(true), 50);
+  }
 
   return (
     <div className="flex flex-col items-center min-h-full px-8 pb-24 pt-12">
@@ -76,7 +72,7 @@ export default function SOSTab() {
             {feelings.map(({ key, label, icon: Icon, color }) => (
               <button
                 key={key}
-                onClick={() => setSelected(key)}
+                onClick={() => handleSelect(key)}
                 className={`flex flex-col items-center gap-2 py-5 px-4 rounded-2xl border transition-all duration-300 active:scale-95 ${color}`}
               >
                 <Icon size={24} className="text-text-primary/70" />
