@@ -1,6 +1,39 @@
-const BASE = "http://localhost:3001/api";
+const ONLINE_BASE = import.meta.env.VITE_API_URL || "https://daily-hug.onrender.com/api";
+const LOCAL_BASE = "http://localhost:3001/api";
+const PROBE_TIMEOUT_MS = 3000;
+
+// Resolve the API base once per session: prefer the online server, fall back
+// to localhost if it can't be reached (so local dev keeps working when the
+// deployed server is down or sleeping). Cached as a promise so concurrent
+// callers share a single probe.
+let baseUrlPromise;
+
+async function isReachable(base) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${base}/health`, { signal: controller.signal });
+    return res.status < 500; // any non-5xx response means the server answered
+  } catch {
+    return false; // network error or timeout
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function getBaseUrl() {
+  if (!baseUrlPromise) {
+    baseUrlPromise = (async () => {
+      const base = (await isReachable(ONLINE_BASE)) ? ONLINE_BASE : LOCAL_BASE;
+      console.info(`[api] using ${base}`);
+      return base;
+    })();
+  }
+  return baseUrlPromise;
+}
 
 async function request(path, options = {}) {
+  const BASE = await getBaseUrl();
   const token = localStorage.getItem("dailyhug_token");
   const headers = options.headers || { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
