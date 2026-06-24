@@ -30,6 +30,8 @@ export const pairPartner = (partnerEmail) =>
 
 // Admin
 export const adminGetUsers = () => request("/admin/users");
+export const adminCreateUser = (data) =>
+  request("/admin/users", { method: "POST", body: JSON.stringify(data) });
 export const adminUpdateUser = (id, data) =>
   request(`/admin/users/${id}`, { method: "PUT", body: JSON.stringify(data) });
 export const adminResetPassword = (id, newPassword) =>

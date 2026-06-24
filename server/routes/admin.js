@@ -16,6 +16,38 @@ router.get("/users", async (_req, res) => {
   res.json(rows);
 });
 
+// Create a new user (admin-only). Unlike /auth/register this does NOT issue a
+// token, claim orphaned data, or change the admin's session — it just inserts.
+router.post("/users", async (req, res) => {
+  const { name, email, password, isAdmin } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: "כל השדות נדרשים" });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: "הסיסמה חייבת להכיל לפחות 6 תווים" });
+  }
+
+  const { rows: existing } = await pool.query(
+    "SELECT id FROM users WHERE email = $1",
+    [email]
+  );
+  if (existing[0]) {
+    return res.status(409).json({ error: "האימייל הזה כבר רשום" });
+  }
+
+  const id = `u-${Date.now()}`;
+  const password_hash = bcrypt.hashSync(password, 10);
+  const created_at = Date.now();
+  const is_admin = isAdmin ? 1 : 0;
+
+  await pool.query(
+    "INSERT INTO users (id, email, password_hash, name, partner_email, created_at, is_admin) VALUES ($1, $2, $3, $4, NULL, $5, $6)",
+    [id, email, password_hash, name, created_at, is_admin]
+  );
+
+  res.json({ id, email, name, partner_email: null, is_admin, created_at });
+});
+
 // Update user details (name, email, partner_email)
 router.put("/users/:id", async (req, res) => {
   const { name, email, partnerEmail } = req.body;

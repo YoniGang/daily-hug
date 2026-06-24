@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Trash2, Save, KeyRound, Users, Loader2 } from "lucide-react";
+import { X, Trash2, Save, KeyRound, Users, Loader2, UserPlus } from "lucide-react";
 import * as api from "../api";
 
 const inputClass =
@@ -180,9 +180,76 @@ function UserCard({ user, onUpdate, onDelete }) {
   );
 }
 
+function CreateUserForm({ onCreate, onCancel }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit() {
+    if (!name || !email || !password) return setError("כל השדות נדרשים");
+    if (password.length < 6) return setError("הסיסמה חייבת להכיל לפחות 6 תווים");
+    setSaving(true);
+    setError("");
+    try {
+      const created = await api.adminCreateUser({ name, email, password, isAdmin });
+      onCreate(created);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-sage-dark/40 p-4 space-y-3">
+      <p className="text-sm font-bold text-text-primary">משתמש/ת חדש/ה</p>
+      {error && <p className="text-xs font-semibold text-blush-dark">{error}</p>}
+
+      <label className="block">
+        <span className="text-xs font-semibold text-text-secondary mb-1 block">שם</span>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+      </label>
+      <label className="block">
+        <span className="text-xs font-semibold text-text-secondary mb-1 block">אימייל</span>
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
+      </label>
+      <label className="block">
+        <span className="text-xs font-semibold text-text-secondary mb-1 block">סיסמה</span>
+        <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClass} autoComplete="new-password" placeholder="לפחות 6 תווים" />
+      </label>
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} className="w-4 h-4 rounded accent-lavender-dark" />
+        <span className="text-xs font-semibold text-text-secondary">הרשאת מנהל/ת</span>
+      </label>
+
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={handleSubmit}
+          disabled={saving}
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-sage/50 text-text-primary font-semibold text-xs transition-all hover:bg-sage-dark/40 active:scale-[0.98] disabled:opacity-40"
+        >
+          {saving ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />}
+          צור משתמש/ת
+        </button>
+        <button
+          onClick={onCancel}
+          disabled={saving}
+          className="flex-1 py-2.5 rounded-xl bg-warm-gray/50 text-text-secondary font-semibold text-xs transition-all disabled:opacity-40"
+        >
+          ביטול
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPanel({ onClose }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     api.adminGetUsers()
@@ -198,6 +265,11 @@ export default function AdminPanel({ onClose }) {
     setUsers((prev) => prev.filter((u) => u.id !== id));
   }
 
+  function handleCreate(newUser) {
+    setUsers((prev) => [newUser, ...prev]);
+    setCreating(false);
+  }
+
   return (
     <div className="fixed inset-0 z-[100] bg-cream flex flex-col mx-auto max-w-[480px]">
       {/* Header */}
@@ -206,16 +278,30 @@ export default function AdminPanel({ onClose }) {
           <Users size={18} className="text-text-secondary" />
           <h2 className="text-base font-bold text-text-primary">ניהול משתמשים</h2>
         </div>
-        <button
-          onClick={onClose}
-          className="p-2 rounded-xl hover:bg-warm-gray/60 transition-colors"
-        >
-          <X size={20} className="text-text-secondary" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setCreating((c) => !c)}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
+              creating ? "bg-warm-gray/50 text-text-primary" : "bg-sage/50 text-text-primary hover:bg-sage-dark/40"
+            }`}
+          >
+            <UserPlus size={14} />
+            {creating ? "ביטול" : "משתמש/ת חדש/ה"}
+          </button>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl hover:bg-warm-gray/60 transition-colors"
+          >
+            <X size={20} className="text-text-secondary" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6 space-y-3">
+        {creating && (
+          <CreateUserForm onCreate={handleCreate} onCancel={() => setCreating(false)} />
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 size={24} className="text-peach-dark animate-spin" />
