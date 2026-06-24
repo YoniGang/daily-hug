@@ -20,6 +20,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Health check (public — no auth required)
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", uptime: process.uptime() });
+});
+
 // Public auth routes
 app.use("/api/auth", authRouter);
 
